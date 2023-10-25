@@ -18,7 +18,9 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "ctypes.h"
+#include <unistd.h> // Para a função close
+
+#include "../ctypes.h"
 #if JSON_INTERFACE == 1
 
 #include "json.h"
@@ -1194,7 +1196,7 @@ char *wget(const char *host, int port, int *len, const char *fmt, ...) {
 					}
 				}
 			}
-			closesocket(sock);
+			close(sock);
 		}
 	}
 

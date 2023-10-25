@@ -17,6 +17,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
+#include <time.h>
 
 #if HIGH_LEVEL_INTERFACE == 0
 	#define WPCAP
@@ -30,7 +31,7 @@
 #include "interface.h"
 #endif
 
-#include "json.h"
+#include "json/json.h"
 
 #if HIGH_LEVEL_INTERFACE == 0
 

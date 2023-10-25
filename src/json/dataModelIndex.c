@@ -19,9 +19,9 @@
  */
 
 #include <stdlib.h>
-#include "ctypes.h"
-#include "datatypes.h"
-#include "ied.h"
+#include "../ctypes.h"
+#include "../datatypes.h"
+#include "../ied.h"
 #include "dataModelIndex.h"
 
 

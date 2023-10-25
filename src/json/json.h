@@ -40,10 +40,10 @@ extern "C" {
 #include <netdb.h>
 #include <netinet/in.h>
 #endif
-#include "ctypes.h"
+#include "../ctypes.h"
 #include "dataModelIndex.h"
-#include "ied.h"
-#include "datatypes.h"
+#include "../ied.h"
+#include "../datatypes.h"
 
 #define WEB_SERVER_SELECT_MAX_TIME		5	// ms
 #define EMULATED_IED_REFRESH_TIME		(WEB_SERVER_SELECT_MAX_TIME * 10)
