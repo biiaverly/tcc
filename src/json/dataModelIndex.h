@@ -19,7 +19,7 @@
  */
 
 
-#include "ctypes.h"
+#include "../ctypes.h"
 #if JSON_INTERFACE == 1
 
 #ifndef JSON_DATABASE_H

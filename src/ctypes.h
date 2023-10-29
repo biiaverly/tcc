@@ -33,7 +33,7 @@ extern "C" {
 #define HIGH_LEVEL_INTERFACE	0	//
 #define JSON_INTERFACE			1	// set to 1 to enable the JSON-based web interface over HTTP
 
-#define LOCAL_MAC_ADDRESS_VALUE	{0x01, 0x0C, 0xCD, 0x01, 0x00, 0x02}
+#define LOCAL_MAC_ADDRESS_VALUE	{0x06, 0xf2, 0x67, 0x5e, 0xce, 0x2d}
 
 // platform-specific data types to conform to SV type sizes (Table 14 in IEC 61850-9-2)
 #define CTYPE_BOOLEAN		unsigned char
