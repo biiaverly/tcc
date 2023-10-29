@@ -17,7 +17,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
-
+#include <sys/time.h>
 #include "ctypes.h"
 #include "gse.h"
 #include "sv.h"
@@ -159,7 +159,6 @@ void reversememcpy(unsigned char *dst, const unsigned char *src, unsigned int le
 }
 
 void setTimestamp(CTYPE_TIMESTAMP *dest) {
-#if TIMESTAMP_SUPPORTED == 1
 	unsigned char *buf = (unsigned char *) dest;
 	struct timeval tv;
 	CTYPE_INT32U frac = 0;
@@ -171,7 +170,6 @@ void setTimestamp(CTYPE_TIMESTAMP *dest) {
 	netmemcpy(&buf[4], &frac, 4);
 
 	buf[7] = 0x18;	// quality: 24 bits of accuracy
-#endif
 }
 
 // if the recommended MAC address ranges are used, this function filters GOOSE and SV packets
