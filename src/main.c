@@ -3,16 +3,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-
-
 #include <pcap.h>
 #include "iec61850.h"
-
-
 #include "json/json.h"
 
-
 #define BUFFER_LENGTH	2048
+struct timeval inicioProcessamento, fimProcessamento,inicioEnvioPacotes,fimEnvioPacotes,inicioEnvioPacote,fimEnvioPacote;
 
 pcap_t *fp;
 char errbuf[PCAP_ERRBUF_SIZE];
@@ -23,30 +19,64 @@ void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_cha
 	gse_sv_packet_filter((unsigned char *) pkt_data, header->len);
 }
 
+
+void calculaProcessamento(clock_t inicio, clock_t fim) {
+   (double)(fim - inicio) / CLOCKS_PER_SEC;
+}
+
 void enviarPacotesComAtrasos(float valueGSE, pcap_t *fp) {
-    int delay = 0;  // Atraso inicial de 3ms
+
+    gettimeofday(&inicioEnvioPacotes, NULL);
+
+	int delay = 2;  // Atraso inicial de 3ms
     int max_delay = 20;  // Atraso máximo de 20ms
+    int len = 0;
+    unsigned char buf[BUFFER_LENGTH] = {0};
+
+	printf("Enviando pacotes com atraso de %d ms\n", 0);
+	gettimeofday(&inicioEnvioPacote, NULL);
+
+	/// Enviando o primeiro pacote apos um Evento (senf(buf,1,2))
+    E1Q1SB1.S1.C1.TVTRa_1.Vol.instMag.f = valueGSE;
+	len = E1Q1SB1.S1.C1.LN0.ItlPositions.send(buf, 1, 2);
+	pcap_sendpacket(fp, buf, len);
+
+	gettimeofday(&fimEnvioPacote, NULL);
+	double tempoEnvioPacote1 = (double)(fimEnvioPacote.tv_sec - inicioEnvioPacote.tv_sec) + (double)(fimEnvioPacote.tv_usec - inicioEnvioPacote.tv_usec) / 1000000.0;
+	printf("Tempo envio Pacote: %f segundos\n", tempoEnvioPacote1);
+	printf("\n");
+
+    usleep(2 * 1000);  // Converte para microssegundos
 
     while (delay <= max_delay) {
-        unsigned char buf[BUFFER_LENGTH] = {0};
-        int len = 0;
+		gettimeofday(&inicioEnvioPacote, NULL);
 
-        E1Q1SB1.S1.C1.TVTRa_1.Vol.instMag.f = valueGSE;
-        len = E1Q1SB1.S1.C1.LN0.ItlPositions.send(buf, 1, delay);
-        pcap_sendpacket(fp, buf, len);
-        printf("Enviando pacotes com atraso de %d ms\n", delay);
         usleep(delay * 1000);  // Converte para microssegundos
 
-        struct timeval current_time;
-        gettimeofday(&current_time, NULL);
+	/// Enviando os pacotes seguintes (senf(buf,0,2))
+		len = E1Q1SB1.S1.C1.LN0.ItlPositions.send(buf, 0, delay);
+        pcap_sendpacket(fp, buf, len);
 
-        // Converter os microssegundos em milissegundos
-        long milliseconds = (current_time.tv_sec * 1000) + (current_time.tv_usec / 1000);
+        printf("Enviando pacotes com atraso de %d ms\n", delay);
 
-        printf("Hora atual em milissegundos: %ld ms\n", milliseconds);
+
+		gettimeofday(&fimEnvioPacote, NULL);
+
+		double tempoProcessamentoPacote = (double)(fimEnvioPacote.tv_sec - inicioEnvioPacote.tv_sec) + (double)(fimEnvioPacote.tv_usec - inicioEnvioPacote.tv_usec) / 1000000.0;
+		double tempoEnvioPacote = (double)(fimEnvioPacote.tv_sec - inicioEnvioPacotes.tv_sec) + (double)(fimEnvioPacote.tv_usec - inicioEnvioPacotes.tv_usec) / 1000000.0;
+
+		printf("Tempo processamento Pacote: %f segundos\n",tempoProcessamentoPacote);
+		printf("Tempo envio Pacote: %f segundos\n", tempoEnvioPacote);
+		printf("\n");
+
         delay += 2;  // Incremento de 2ms a cada iteração
     }
+	gettimeofday(&fimEnvioPacotes, NULL);
+	double tempoEnvioPacote = (double)(fimEnvioPacotes.tv_sec - inicioEnvioPacotes.tv_sec) + (double)(fimEnvioPacotes.tv_usec - inicioEnvioPacotes.tv_usec) / 1000000.0;
+	printf("Tempo envio Pacotes: %f segundos\n", tempoEnvioPacote);
+	printf("\n");
 }
+
 pcap_t *initWinpcap() {
 	pcap_t *fpl;
     pcap_if_t *alldevs;
@@ -59,7 +89,6 @@ pcap_t *initWinpcap() {
 	}
 
     used_if = alldevs;
-    fprintf(stdout, "%s\n", used_if->name);
     fflush(stdout);
 
 	if ((fpl = pcap_open_live(used_if->name,	// name of the device
@@ -81,43 +110,18 @@ pcap_t *initWinpcap() {
 int main() {
 
     int len = 0;
-
     float valueGSE = (float)rand() / (float)RAND_MAX;
     initialise_iec61850();
     fp = initWinpcap();
 
+
+
     enviarPacotesComAtrasos(valueGSE, fp);
 
 
-	gse_sv_packet_filter(buf, len);
-	printf("GSE test: %s\n", D1Q1SB4.S1.C1.RSYNa_1.gse_inputs_ItlPositions.E1Q1SB1_C1_Positions.C1_TVTR_1_Vol_instMag.f == valueGSE ? "passed" : "failed");
-	printf("Len: %d\n", len);
-
 	fflush(stdout);
-
-	// test database lookup
-	unsigned char databaseValueResult = 0;
-	Item *ln = getLN("E1Q1SB1", "C1", "TVTRa_1");
-	if (ln != NULL) {
-		Item *valueDatabaseRef = getItem(ln, 3, "Vol", "instMag", "f");
-		if (valueDatabaseRef != NULL) {
-			float *databaseValue = (float *) (valueDatabaseRef->data);
-
-			if (*databaseValue == valueGSE) {
-				databaseValueResult = TRUE;
-			}
-		}
-		else {
-			printf("Database lookup test: item null\n");
-		}
-	}
-	else {
-		printf("Database lookup test: LN null\n");
-	}
-	printf("Database lookup test: %s\n", databaseValueResult ? "passed" : "failed");
-	fflush(stdout);
-
 	pcap_close(fp);
+
 
 	return 0;
 }
