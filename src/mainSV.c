@@ -23,7 +23,7 @@ void enviarPacoteSV(float valueSV, pcap_t *fp) {
     unsigned char buf[BUFFER_LENGTH] = {0};
 
 	// test Sampled Values
-	E1Q1SB1.S1.C1.exampleRMXU_1.AmpLocPhsA.instMag.f = valueSV;
+	E1Q1SB1.S1.C1.exampleRMXU_1.AmpLocPhsA.instMag.f = rand();
 
 	printf("Enviando value SV: %f\n", valueSV);
 
@@ -39,7 +39,9 @@ void enviarPacoteSV(float valueSV, pcap_t *fp) {
 			printf("SV test: %s\n", D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsA.instMag.f == valueSV ? "passed" : "failed");
 			fflush(stdout);
 			printf("Valor de i: %d \n",i);
+			printf("\n");
 		}
+
 	}
 
 }
@@ -72,6 +74,19 @@ pcap_t *initWinpcap() {
 	return fpl;
 }
 
+void utc() {
+		struct timespec ts;
+		clock_gettime(CLOCK_REALTIME, &ts);
+
+		struct tm tm;
+		localtime_r(&ts.tv_sec, &tm);
+
+		char formattedTime[20];
+		strftime(formattedTime, sizeof(formattedTime), "%H:%M:%S", &tm);
+
+		printf("Hora recebimento: %s.%09ld\n", formattedTime, ts.tv_nsec);
+}
+
 int main() {
 
     int len = 0;
@@ -80,8 +95,14 @@ int main() {
     fp = initWinpcap();
 
 
-	
-    enviarPacoteSV(valueSV, fp);
+	int max_delay = 1000;
+	int delay = 0;	
+    while (delay <= max_delay) {
+		utc();
+    	enviarPacoteSV(valueSV, fp);
+		usleep(208); // Espera por 208 nanossegundos
+	    delay++; // Incrementa delay (ou use a lógica desejada para ajustar o valor de delay)
+	}
 
 
 	fflush(stdout);
