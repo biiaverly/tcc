@@ -31,7 +31,6 @@ char* utc() {
 		printf("Hora recebimento: %s.%09ld\n", formattedTime, ts.tv_nsec);
 }
 
-// Função para formatar os valores em uma string
 char* formatString(char* hora, int contador, int len, float valor) {
     // Aloca espaço para a string resultante
     char* result = (char*)malloc(256);  // Ajuste o tamanho conforme necessário
@@ -42,10 +41,10 @@ char* formatString(char* hora, int contador, int len, float valor) {
     struct tm* time_info = gmtime(&current_time.tv_sec);
 
     // Formata os valores na string
-    sprintf(result, "%d-%02d-%02d %02d:%02d:%02d.%03ld,%f,%d,%d",
+    sprintf(result, "%d-%02d-%02d %02d:%02d:%02d.%06ld,%f,%d,%d",
             1900 + time_info->tm_year, time_info->tm_mon + 1, time_info->tm_mday,
             time_info->tm_hour, time_info->tm_min, time_info->tm_sec,
-            current_time.tv_usec / 1000, valor, contador, len);
+            current_time.tv_usec, valor, contador, len);
 
     // Retorna a string resultante
     return result;
@@ -61,9 +60,6 @@ void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_cha
 			fprintf(stderr, "Erro ao abrir o arquivo para escrita.\n");
 			return ;
 		}
-
-
-
 
 		utc();
 
@@ -148,7 +144,7 @@ int main() {
 	file = fopen("recebe.csv", "a"); // Abre o arquivo para escrita (modo de adição)
 
 	printf("Inicio captura de pacote: ");
-	pcap_loop(fp, 100, packet_handler,NULL);
+	pcap_loop(fp, 400, packet_handler,NULL);
 	printf("\n");
 
 	pcap_close(fp);
