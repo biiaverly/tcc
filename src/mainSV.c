@@ -24,27 +24,22 @@ void enviarPacoteSV(float valueSV, pcap_t *fp) {
 
 	// test Sampled Values
 	E1Q1SB1.S1.C1.exampleRMXU_1.AmpLocPhsA.instMag.f = valueSV;
-	E1Q1SB1.S1.C1.exampleRMXU_1.AmpLocPhsB.instMag.f = 2;
 
 	printf("Enviando value SV: %f\n", valueSV);
 
 	int i = 0;
 	for (i = 0; i < E1Q1SB1.S1.C1.LN0.rmxuCB.noASDU; i++) {
 		len = E1Q1SB1.S1.C1.LN0.rmxuCB.update(buf);
-		printf("len value SV: %d\n", len);
-
 		if (len > 0) {
+			printf("len value SV: %d\n", len);
 			pcap_sendpacket(fp, buf, len);
-			
 			gse_sv_packet_filter(buf, len);
 
 			printf("Valor: %f\n", D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[0].C1_RMXU_1_AmpLocPhsA.instMag.f);
-			printf("Valor: %f\n", D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[1].C1_RMXU_1_AmpLocPhsA.instMag.f);
-
 			printf("SV test: %s\n", D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsA.instMag.f == valueSV ? "passed" : "failed");
 			fflush(stdout);
+			printf("Valor de i: %d \n",i);
 		}
-		printf("%d",i);
 	}
 
 }
@@ -85,7 +80,7 @@ int main() {
     fp = initWinpcap();
 
 
-
+	
     enviarPacoteSV(valueSV, fp);
 
 
