@@ -20,44 +20,61 @@ void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_cha
 }
 
 
-void calculaProcessamento(clock_t inicio, clock_t fim) {
-   (double)(fim - inicio) / CLOCKS_PER_SEC;
-}
-
 void enviarPacotesComAtrasos(float valueGSE, pcap_t *fp) {
 
     gettimeofday(&inicioEnvioPacotes, NULL);
 
-	int delay = 2;  // Atraso inicial de 3ms
-    int max_delay = 20;  // Atraso máximo de 20ms
+	int delay = 2;  
+    int max_delay = 20; 
     int len = 0;
     unsigned char buf[BUFFER_LENGTH] = {0};
 
 	printf("Enviando pacotes com atraso de %d ms\n", 0);
-	gettimeofday(&inicioEnvioPacote, NULL);
 
 	/// Enviando o primeiro pacote apos um Evento (senf(buf,1,2))
     E1Q1SB1.S1.C1.TVTRa_1.Vol.instMag.f = valueGSE;
+
+	struct timeval tv;
+	struct tm *timeinfo;
+	char buffer[80];
+	char ms_buffer[18];
+
+	gettimeofday(&tv, NULL);
+	timeinfo = gmtime(&tv.tv_sec);
 	len = E1Q1SB1.S1.C1.LN0.ItlPositions.send(buf, 1, 2);
 	pcap_sendpacket(fp, buf, len);
 
-	gettimeofday(&fimEnvioPacote, NULL);
-	double tempoEnvioPacote1 = (double)(fimEnvioPacote.tv_sec - inicioEnvioPacote.tv_sec) + (double)(fimEnvioPacote.tv_usec - inicioEnvioPacote.tv_usec) / 1000000.0;
-	printf("Tempo envio Pacote: %f segundos\n", tempoEnvioPacote1);
-	printf("\n");
+	struct timespec ts;
+	clock_gettime(CLOCK_REALTIME, &ts);
 
-    usleep(2 * 1000);  // Converte para microssegundos
+	struct tm tm;
+	localtime_r(&ts.tv_sec, &tm);
+
+	char formattedTime[20];
+	strftime(formattedTime, sizeof(formattedTime), "%H:%M:%S", &tm);
+
+	printf("%s.%09ld\n", formattedTime, ts.tv_nsec);
 
     while (delay <= max_delay) {
 		gettimeofday(&inicioEnvioPacote, NULL);
 
         usleep(delay * 1000);  // Converte para microssegundos
-
-	/// Enviando os pacotes seguintes (senf(buf,0,2))
-		len = E1Q1SB1.S1.C1.LN0.ItlPositions.send(buf, 0, delay);
+        printf("Enviando pacotes com atraso de %d ms\n", delay);
         pcap_sendpacket(fp, buf, len);
 
-        printf("Enviando pacotes com atraso de %d ms\n", delay);
+	/// Enviando os pacotes seguintes (senf(buf,0,2))
+
+
+		struct timespec ts;
+		clock_gettime(CLOCK_REALTIME, &ts);
+
+		struct tm tm;
+		localtime_r(&ts.tv_sec, &tm);
+
+		char formattedTime[20];
+		strftime(formattedTime, sizeof(formattedTime), "%H:%M:%S", &tm);
+
+		printf("Hora do envio: %s.%09ld\n", formattedTime, ts.tv_nsec);
 
 
 		gettimeofday(&fimEnvioPacote, NULL);
