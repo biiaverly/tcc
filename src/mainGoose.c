@@ -20,7 +20,7 @@ void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_cha
 	gse_sv_packet_filter((unsigned char *) pkt_data, header->len);
 }
 
-char* formatString(char* hora, int contador, int len, float valor) {
+char* formatString( int contador, int len, float valor) {
     // Aloca espaço para a string resultante
     char* result = (char*)malloc(256);  // Ajuste o tamanho conforme necessário
 
@@ -44,6 +44,7 @@ void enviarPacotesComAtrasos(float valueGSE, pcap_t *fp) {
 	int delay = 2;  
     int max_delay = 20; 
     int len = 0;
+	int contador = 1;
     unsigned char buf[BUFFER_LENGTH] = {0};
 
 	printf("Enviando pacotes com atraso de %d ms\n", 0);
@@ -54,12 +55,22 @@ void enviarPacotesComAtrasos(float valueGSE, pcap_t *fp) {
 	len = E1Q1SB1.S1.C1.LN0.ItlPositions.send(buf, 1, 2);
 	pcap_sendpacket(fp, buf, len);
 
+	int inputValue = D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsA.instMag.f;
+	char* stringFormatada = formatString(contador,len, inputValue);
+	// Escreve cabeçalho (opcional)
+	fprintf(file, "%s\n", stringFormatada);
+
     while (delay <= max_delay) {
-	len = E1Q1SB1.S1.C1.LN0.ItlPositions.send(buf, 0, 2);
+		contador++;
+		len = E1Q1SB1.S1.C1.LN0.ItlPositions.send(buf, 0, 2);
 
         usleep(delay * 1000);  // Converte para microssegundos
         printf("Enviando pacotes com atraso de %d ms\n", delay);
         pcap_sendpacket(fp, buf, len);
+
+		int inputValue = valueGSE;
+		char* stringFormatada = formatString(contador,len, inputValue);
+		fprintf(file, "%s\n", stringFormatada);
 
         delay += 2;  // Incremento de 2ms a cada iteração
     }
@@ -99,10 +110,11 @@ pcap_t *initWinpcap() {
 int main() {
 
     int len = 0;
-    float valueGSE = (float)rand() / (float)RAND_MAX;
+    float valueGSE = (float)rand();
     initialise_iec61850();
     fp = initWinpcap();
 
+	file = fopen("enviaGoose.csv", "a"); // Abre o arquivo para escrita (modo de adição)
 
 
     enviarPacotesComAtrasos(valueGSE, fp);
@@ -110,6 +122,7 @@ int main() {
 
 	fflush(stdout);
 	pcap_close(fp);
+	fclose(file);
 
 
 	return 0;
