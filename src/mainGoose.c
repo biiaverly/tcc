@@ -41,40 +41,54 @@ char* formatString( int contador, int len, float valor) {
 
 void enviarPacotesComAtrasos(float valueGSE, pcap_t *fp) {
 
-	int delay = 2;  
-    int max_delay = 20; 
+	int delay = 1;  
+    int max_delay = 50; 
     int len = 0;
 	int contador = 1;
     unsigned char buf[BUFFER_LENGTH] = {0};
 
 	printf("Enviando pacotes com atraso de %d ms\n", 0);
 
-	/// Enviando o primeiro pacote apos um Evento (senf(buf,1,2))
+/// Enviando o primeiro pacote apos um Evento (senf(buf,1,2))
     E1Q1SB1.S1.C1.TVTRa_1.Vol.instMag.f = valueGSE;
-
 	len = E1Q1SB1.S1.C1.LN0.ItlPositions.send(buf, 1, 2);
 	pcap_sendpacket(fp, buf, len);
 
+///Salvando o dado no csv.	
 	int inputValue = D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsA.instMag.f;
 	char* stringFormatada = formatString(contador,len, inputValue);
-	// Escreve cabeçalho (opcional)
 	fprintf(file, "%s\n", stringFormatada);
 
+/// Parte transitoria de quando ocorre um evento ate chegar a parte estavel 
     while (delay <= max_delay) {
 		contador++;
 		len = E1Q1SB1.S1.C1.LN0.ItlPositions.send(buf, 0, 2);
 
         usleep(delay * 1000);  // Converte para microssegundos
-        printf("Enviando pacotes com atraso de %d ms\n", delay);
+        printf("Enviando pacotes numero %d com atraso de %d ms\n",contador, delay);
         pcap_sendpacket(fp, buf, len);
 
-		int inputValue = valueGSE;
 		char* stringFormatada = formatString(contador,len, inputValue);
 		fprintf(file, "%s\n", stringFormatada);
 
         delay += 2;  // Incremento de 2ms a cada iteração
     }
-	printf("\n");
+
+/// Enviando pacotes com delay fixo (keep alive)
+    E1Q1SB1.S1.C1.TVTRa_1.Vol.instMag.f = 13800;
+//	Definindo o tempo fixo como 50 ms
+	int delayFixo = 50000; 
+	len = E1Q1SB1.S1.C1.LN0.ItlPositions.send(buf, 0, 2);
+	for(int cont =0 ; cont < 20 ; cont++){
+		int nPacote = contador + cont +1;
+		printf("Enviando pacotes com rede estavel %d \n",nPacote);
+		pcap_sendpacket(fp, buf, len);
+		char* stringFormatada = formatString(nPacote,len, inputValue);
+		fprintf(file, "%s\n", stringFormatada);
+		usleep(delayFixo);  // Converte para microssegundos
+
+	}
+
 }
 
 pcap_t *initWinpcap() {

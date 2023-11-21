@@ -19,6 +19,7 @@ int contador = 0;
 void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_data) {
 	gse_sv_packet_filter((unsigned char *) pkt_data, header->len);
 }
+/// F
 char* utc() {
 		struct timespec ts;
 		clock_gettime(CLOCK_REALTIME, &ts);
@@ -73,6 +74,7 @@ void enviarPacoteSV(float valueSV, pcap_t *fp) {
 			fflush(stdout);
 			printf("Valor de i: %d \n",i);
 			printf("\n");
+			
 			int inputValue = D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsA.instMag.f;
     		char* stringFormatada = formatString(hora, contador,len, inputValue);
 		// Escreve cabeçalho (opcional)
@@ -120,16 +122,19 @@ int main() {
     initialise_iec61850();
     fp = initWinpcap();
 
-	file = fopen("envia.csv", "a"); // Abre o arquivo para escrita (modo de adição)
+	file = fopen("enviaSV.csv", "a"); // Abre o arquivo para escrita (modo de adição)
 
 	int max_delay = 300;
-	int delay = 0;	
+	int delay = 0;
+	clock_t inicio = clock();	
     while (delay <= max_delay) {
     	enviarPacoteSV(valueSV, fp);
 		usleep(208); // Espera por 208 nanossegundos
 	    delay++; // Incrementa delay (ou use a lógica desejada para ajustar o valor de delay)
 	}
-
+    clock_t fim = clock();
+    double tempoDecorrido = ((double)(fim - inicio)) / CLOCKS_PER_SEC;
+    printf("O programa levou %.6f segundos para executar.\n", tempoDecorrido);
 
 	fflush(stdout);
 	pcap_close(fp);
