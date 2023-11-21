@@ -54,11 +54,7 @@ static int contador = 0; // Declara um contador como estático para preservar se
 static int contadorSV = 0; // Declara um contador como estático para preservar seu valor entre chamadas
 
 void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_data) {
-    	
-		char* hora = utc();
-    	char* stringFormatada = formatString(hora, 1, header->len, 0);
-		// Escreve cabeçalho (opcional)
-		fprintf(file, "%s\n", stringFormatada);
+
 
 		if (file == NULL) {
 			fprintf(stderr, "Erro ao abrir o arquivo para escrita.\n");
@@ -82,10 +78,8 @@ void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_cha
 		float inputValue = D1Q1SB4.S1.C1.RSYNa_1.gse_inputs_ItlPositions.E1Q1SB1_C1_Positions.C1_TVTR_1_Vol_instMag.f;
 		printf("Valor %f\n",inputValue);
  
-    	char* hora = utc();
-    	char* stringFormatada = formatString(hora, contador, header->len, inputValue);
-		// Escreve cabeçalho (opcional)
-		fprintf(file, "%s\n", stringFormatada);
+		fprintf(file, "Carlos,28,Belo Horizonte\n");
+
     }
 	
 	if (pkt_data[3] == 0x04) {
@@ -150,12 +144,7 @@ int main() {
 	file = fopen("recebe.csv", "a"); // Abre o arquivo para escrita (modo de adição)
 
 	printf("Inicio captura de pacote: ");
-
-	clock_t inicio = clock();
-	pcap_loop(fp, 310, packet_handler,NULL);
-	clock_t fim = clock();
-	double tempo = ((double)(fim-inicio))/CLOCKS_PER_SEC;
-	printf("tempo captura de pacotes %.6f segundos",tempo);
+	pcap_loop(fp, 400, packet_handler,NULL);
 	printf("\n");
 
 	pcap_close(fp);
