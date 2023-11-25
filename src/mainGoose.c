@@ -1,4 +1,3 @@
-
 #include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,14 +5,11 @@
 #include <pcap.h>
 #include "iec61850.h"
 #include "json/json.h"
-
 #define BUFFER_LENGTH	2048
-struct timeval inicioProcessamento, fimProcessamento,inicioEnvioPacotes,fimEnvioPacotes,inicioEnvioPacote,fimEnvioPacote;
 
 pcap_t *fp;
 char errbuf[PCAP_ERRBUF_SIZE];
 unsigned char buf[BUFFER_LENGTH] = {0};
-int len = 0;
 FILE *file;
 
 void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_data) {
@@ -49,53 +45,44 @@ void enviarPacotesComAtrasos(float valueGSE, pcap_t *fp) {
 
 	printf("Enviando pacotes com atraso de %d ms\n", 0);
 
-/// Enviando o primeiro pacote apos um Evento.
-	/// 1. Setando a tensao no transformador para valueGSE.
-	/// 2. Padrao IEC61850: DispositivoFisico.DispositivoLogico.NoLogico.DataObjeto_instancia.DataAtributo
+/// Enviando o primeiro pacote apos um Evento (senf(buf,1,2))
     E1Q1SB1.S1.C1.TVTRa_1.Vol.instMag.f = valueGSE;
-	///3. Gerando um pacote Goose para o GOSECONTROL ItLPositions.
-	/// send(buf,1,2) o valor 1 define a mudanca no stNum do pacote Goose,informando a ocorrencia de um evento.
 	len = E1Q1SB1.S1.C1.LN0.ItlPositions.send(buf, 1, 2);
-	///4. Envio imediato do pacote apos a ocorrencia de um evento.
 	pcap_sendpacket(fp, buf, len);
 
 ///Salvando o dado no csv.	
-	int inputValue = valueGSE;
+	int inputValue = E1Q1SB1.S1.C1.TVTRa_1.Vol.instMag.f;
 	char* stringFormatada = formatString(contador,len, inputValue);
 	fprintf(file, "%s\n", stringFormatada);
 
-/// Envio de pacotes seguintes apos a ocorrencia de um evento.
+/// Parte transitoria de quando ocorre um evento ate chegar a parte estavel 
     while (delay <= max_delay) {
 		contador++;
-
-	/// 1. Gerando um pacote Goose apos a ocorrencia de um evento.
-		/// send(buf,0,2) o valor 0 define a mudanca no sqNum.
 		len = E1Q1SB1.S1.C1.LN0.ItlPositions.send(buf, 0, 2);
-	/// 2. Delay para o envio da proxima mensagem.
-        usleep(delay * 1000); 
+
+        usleep(delay * 1000);  // Converte para microssegundos
         printf("Enviando pacotes numero %d com atraso de %d ms\n",contador, delay);
-	/// 3. Envio do pacote para rede utilizando o pcap.
         pcap_sendpacket(fp, buf, len);
-	/// 4. Salvando os dados no excel.
+
 		char* stringFormatada = formatString(contador,len, inputValue);
 		fprintf(file, "%s\n", stringFormatada);
-	/// 4. Aumentando o tempo de retransmissao em 2ms.
-        delay += 2;  
+
+        delay += 2;  // Incremento de 2ms a cada iteração
     }
 
 /// Enviando pacotes com delay fixo (keep alive)
     E1Q1SB1.S1.C1.TVTRa_1.Vol.instMag.f = 13800;
-	//	1.Definindo o tempo fixo como 50 ms
+//	Definindo o tempo fixo como 50 ms
 	int delayFixo = 50000; 
 	len = E1Q1SB1.S1.C1.LN0.ItlPositions.send(buf, 0, 2);
-	//	2.Envio de 20 pacotes ate fim da aplicacao.
 	for(int cont =0 ; cont < 20 ; cont++){
 		int nPacote = contador + cont +1;
 		printf("Enviando pacotes com rede estavel %d \n",nPacote);
 		pcap_sendpacket(fp, buf, len);
-		char* stringFormatada = formatString(nPacote,len, inputValue);
+		char* stringFormatada = formatString(nPacote,len, 13800);
 		fprintf(file, "%s\n", stringFormatada);
 		usleep(delayFixo);  // Converte para microssegundos
+
 	}
 
 }
@@ -131,20 +118,26 @@ pcap_t *initWinpcap() {
 }
 
 int main() {
-// Definindo as variaveis iniciais e inicializando rapid61850 e pcap.
+
     int len = 0;
     float valueGSE = (float)rand();
     initialise_iec61850();
     fp = initWinpcap();
 
-// Criando excel para salvar os dados.
-	file = fopen("enviaGoose.csv", "a"); 
+	file = fopen("enviaGoose.csv", "a"); // Abre o arquivo para escrita (modo de adição)
 
-// Metodo para enviar pacotes de acordo com a norma IEC61850.
+	clock_t inicio = clock();
+
     enviarPacotesComAtrasos(valueGSE, fp);
+	clock_t fim = clock();
+	double tempo = ((double)(fim-inicio))/CLOCKS_PER_SEC;
+	printf("tempo envio de pacotes %.6f segundos",tempo);
+	printf("\n");
 
 	fflush(stdout);
 	pcap_close(fp);
 	fclose(file);
+
+
 	return 0;
 }
