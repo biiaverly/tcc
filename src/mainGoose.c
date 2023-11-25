@@ -6,14 +6,11 @@
 #include <pcap.h>
 #include "iec61850.h"
 #include "json/json.h"
-
 #define BUFFER_LENGTH	2048
-struct timeval inicioProcessamento, fimProcessamento,inicioEnvioPacotes,fimEnvioPacotes,inicioEnvioPacote,fimEnvioPacote;
 
 pcap_t *fp;
 char errbuf[PCAP_ERRBUF_SIZE];
 unsigned char buf[BUFFER_LENGTH] = {0};
-int len = 0;
 FILE *file;
 
 void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_data) {
@@ -55,7 +52,7 @@ void enviarPacotesComAtrasos(float valueGSE, pcap_t *fp) {
 	pcap_sendpacket(fp, buf, len);
 
 ///Salvando o dado no csv.	
-	int inputValue = D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsA.instMag.f;
+	int inputValue = E1Q1SB1.S1.C1.TVTRa_1.Vol.instMag.f;
 	char* stringFormatada = formatString(contador,len, inputValue);
 	fprintf(file, "%s\n", stringFormatada);
 
@@ -83,7 +80,7 @@ void enviarPacotesComAtrasos(float valueGSE, pcap_t *fp) {
 		int nPacote = contador + cont +1;
 		printf("Enviando pacotes com rede estavel %d \n",nPacote);
 		pcap_sendpacket(fp, buf, len);
-		char* stringFormatada = formatString(nPacote,len, inputValue);
+		char* stringFormatada = formatString(nPacote,len, 13800);
 		fprintf(file, "%s\n", stringFormatada);
 		usleep(delayFixo);  // Converte para microssegundos
 
@@ -130,9 +127,13 @@ int main() {
 
 	file = fopen("enviaGoose.csv", "a"); // Abre o arquivo para escrita (modo de adição)
 
+	clock_t inicio = clock();
 
     enviarPacotesComAtrasos(valueGSE, fp);
-
+	clock_t fim = clock();
+	double tempo = ((double)(fim-inicio))/CLOCKS_PER_SEC;
+	printf("tempo envio de pacotes %.6f segundos",tempo);
+	printf("\n");
 
 	fflush(stdout);
 	pcap_close(fp);
