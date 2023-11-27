@@ -10,7 +10,8 @@ struct timeval inicioProcessamento, fimProcessamento;
 #define BUFFER_LENGTH	2048
 struct timeval iniciorecebimentno, fimrecebimento,inicioEnvioPacotes,fimEnvioPacotes,inicioEnvioPacote,fimEnvioPacote;
 FILE *file;
-
+time_t inicio1, fim1;
+int verifica = 0 ;
 pcap_t *fp;
 char errbuf[PCAP_ERRBUF_SIZE];
 unsigned char buf[BUFFER_LENGTH] = {0};
@@ -55,21 +56,15 @@ static int contadorSV = 0; // Declara um contador como estático para preservar 
 
 void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_data) {
     	
-		char* hora = utc();
-    	char* stringFormatada = formatString(hora, 1, header->len, 0);
-		// Escreve cabeçalho (opcional)
-		fprintf(file, "%s\n", stringFormatada);
-
-		if (file == NULL) {
-			fprintf(stderr, "Erro ao abrir o arquivo para escrita.\n");
-			return ;
-		}
-
-		utc();
-
 	if (pkt_data[3] == 0x01) {
+		utc();
 		contador++; // Incrementa o contador dentro do if
+		verifica++;
+		if(verifica == 1)
+		{
+			time(&inicio1);
 
+		}
 		printf("Pacote %d capturado: %d bytes\n",contador, header->len);
 
 		gse_sv_packet_filter((unsigned char *) pkt_data, header->len);
@@ -81,10 +76,10 @@ void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_cha
 		
 		float inputValue = D1Q1SB4.S1.C1.RSYNa_1.gse_inputs_ItlPositions.E1Q1SB1_C1_Positions.C1_TVTR_1_Vol_instMag.f;
 		printf("Valor %f\n",inputValue);
+		time(&fim1);
  
     	char* hora = utc();
     	char* stringFormatada = formatString(hora, contador, header->len, inputValue);
-		// Escreve cabeçalho (opcional)
 		fprintf(file, "%s\n", stringFormatada);
     }
 	
@@ -146,16 +141,16 @@ int main() {
 	int len = 0;
 	initialise_iec61850();
 	fp = initWinpcap();
-
 	file = fopen("recebe.csv", "a"); // Abre o arquivo para escrita (modo de adição)
 
 	printf("Inicio captura de pacote: ");
+	while(verifica < 46){
+		pcap_loop(fp, 1, packet_handler,NULL);
 
-	clock_t inicio = clock();
-	pcap_loop(fp, 80, packet_handler,NULL);
+	}
 	clock_t fim = clock();
-	double tempo = ((double)(fim-inicio))/CLOCKS_PER_SEC;
-	printf("tempo captura de pacotes %.6f segundos",tempo);
+	double tempo1 = difftime(fim1, inicio1);
+	printf("Tempo total decorrido: %.6f segundos\n", tempo1);
 	printf("\n");
 
 	pcap_close(fp);
