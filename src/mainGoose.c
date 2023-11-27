@@ -12,7 +12,7 @@ pcap_t *fp;
 char errbuf[PCAP_ERRBUF_SIZE];
 unsigned char buf[BUFFER_LENGTH] = {0};
 FILE *file;
-
+time_t inicio1,fim1;
 void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_data) {
 	gse_sv_packet_filter((unsigned char *) pkt_data, header->len);
 }
@@ -35,7 +35,18 @@ char* formatString( int contador, int len, float valor) {
     // Retorna a string resultante
     return result;
 }
+char* utc() {
+		struct timespec ts;
+		clock_gettime(CLOCK_REALTIME, &ts);
 
+		struct tm tm;
+		localtime_r(&ts.tv_sec, &tm);
+
+		char formattedTime[20];
+		strftime(formattedTime, sizeof(formattedTime), "%H:%M:%S", &tm);
+
+		printf("Hora recebimento: %s.%09ld\n", formattedTime, ts.tv_nsec);
+}
 void enviarPacotesComAtrasos(float valueGSE, pcap_t *fp) {
 
 	int delay = 1;  
@@ -50,7 +61,7 @@ void enviarPacotesComAtrasos(float valueGSE, pcap_t *fp) {
     E1Q1SB1.S1.C1.TVTRa_1.Vol.instMag.f = valueGSE;
 	len = E1Q1SB1.S1.C1.LN0.ItlPositions.send(buf, 1, 2);
 	pcap_sendpacket(fp, buf, len);
-
+	utc();		
 ///Salvando o dado no csv.	
 	int inputValue = E1Q1SB1.S1.C1.TVTRa_1.Vol.instMag.f;
 	char* stringFormatada = formatString(contador,len, inputValue);
@@ -59,11 +70,12 @@ void enviarPacotesComAtrasos(float valueGSE, pcap_t *fp) {
 /// Parte transitoria de quando ocorre um evento ate chegar a parte estavel 
     while (delay <= max_delay) {
 		contador++;
-		len = E1Q1SB1.S1.C1.LN0.ItlPositions.send(buf, 0, 2);
+		len = E1Q1SB1.S1.C1.LN0.ItlPositions.send(buf, 0, delay);
 
         usleep(delay * 1000);  // Converte para microssegundos
         printf("Enviando pacotes numero %d com atraso de %d ms\n",contador, delay);
         pcap_sendpacket(fp, buf, len);
+		utc();		
 
 		char* stringFormatada = formatString(contador,len, inputValue);
 		fprintf(file, "%s\n", stringFormatada);
@@ -75,7 +87,7 @@ void enviarPacotesComAtrasos(float valueGSE, pcap_t *fp) {
     E1Q1SB1.S1.C1.TVTRa_1.Vol.instMag.f = 13800;
 //	Definindo o tempo fixo como 50 ms
 	int delayFixo = 50000; 
-	len = E1Q1SB1.S1.C1.LN0.ItlPositions.send(buf, 0, 2);
+	len = E1Q1SB1.S1.C1.LN0.ItlPositions.send(buf, 0, delayFixo);
 	for(int cont =0 ; cont < 20 ; cont++){
 		int nPacote = contador + cont +1;
 		printf("Enviando pacotes com rede estavel %d \n",nPacote);
@@ -129,9 +141,12 @@ int main() {
 
 	clock_t inicio = clock();
 
+	time(&inicio1);
     enviarPacotesComAtrasos(valueGSE, fp);
+	time(&fim1);
+	double tempo = difftime(fim1,inicio1);
 	clock_t fim = clock();
-	double tempo = ((double)(fim-inicio))/CLOCKS_PER_SEC;
+	// double tempo = ((double)(fim-inicio))/CLOCKS_PER_SEC;
 	printf("tempo envio de pacotes %.6f segundos",tempo);
 	printf("\n");
 
