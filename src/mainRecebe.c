@@ -152,7 +152,7 @@ int main() {
 	printf("Inicio captura de pacote: ");
 
 	clock_t inicio = clock();
-	pcap_loop(fp, 310, packet_handler,NULL);
+	pcap_loop(fp, 80, packet_handler,NULL);
 	clock_t fim = clock();
 	double tempo = ((double)(fim-inicio))/CLOCKS_PER_SEC;
 	printf("tempo captura de pacotes %.6f segundos",tempo);
