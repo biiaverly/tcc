@@ -81,6 +81,7 @@ void enviarPacoteSV(float valueSV, pcap_t *fp) {
 
 }
 
+/// Inicializando PCAP.
 pcap_t *initWinpcap() {
 	pcap_t *fpl;
     pcap_if_t *alldevs;
