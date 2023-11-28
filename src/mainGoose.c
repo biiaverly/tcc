@@ -16,6 +16,7 @@ void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_cha
 	gse_sv_packet_filter((unsigned char *) pkt_data, header->len);
 }
 
+//// Metodo criado para formatar os dados para salvar no CSV.
 char* formatString( int contador, int len, float valor) {
     // Aloca espaço para a string resultante
     char* result = (char*)malloc(256);  // Ajuste o tamanho conforme necessário
@@ -34,6 +35,7 @@ char* formatString( int contador, int len, float valor) {
     // Retorna a string resultante
     return result;
 }
+// Metodo criada para pegar hora atual.
 char* utc() {
 		struct timespec ts;
 		clock_gettime(CLOCK_REALTIME, &ts);
@@ -59,12 +61,14 @@ void enviarPacotesComAtrasos(float valueGSE, pcap_t *fp) {
 /// Enviando o primeiro pacote apos um Evento (senf(buf,1,2))
     E1Q1SB1.S1.C1.TVTRa_1.Vol.instMag.f = valueGSE;
 	len = E1Q1SB1.S1.C1.LN0.ItlPositions.send(buf, 1, 2);
+	utc();
+	usleep(100);		
 	pcap_sendpacket(fp, buf, len);
-	utc();		
-///Salvando o dado no csv.	
-	int inputValue = E1Q1SB1.S1.C1.TVTRa_1.Vol.instMag.f;
-	char* stringFormatada = formatString(contador,len, inputValue);
-	fprintf(file, "%s\n", stringFormatada);
+
+// ///Salvando o dado no csv.	
+// 	int inputValue = E1Q1SB1.S1.C1.TVTRa_1.Vol.instMag.f;
+// 	char* stringFormatada = formatString(contador,len, inputValue);
+// 	fprintf(file, "%s\n", stringFormatada);
 
 /// Parte transitoria de quando ocorre um evento ate chegar a parte estavel 
     while (delay <= max_delay) {
@@ -76,8 +80,9 @@ void enviarPacotesComAtrasos(float valueGSE, pcap_t *fp) {
         pcap_sendpacket(fp, buf, len);
 		utc();		
 
-		char* stringFormatada = formatString(contador,len, inputValue);
-		fprintf(file, "%s\n", stringFormatada);
+/// Salvando no csv.
+		// char* stringFormatada = formatString(contador,len, inputValue);
+		// fprintf(file, "%s\n", stringFormatada);
 
         delay += 2;  // Incremento de 2ms a cada iteração
     }
@@ -91,8 +96,9 @@ void enviarPacotesComAtrasos(float valueGSE, pcap_t *fp) {
 		int nPacote = contador + cont +1;
 		printf("Enviando pacotes com rede estavel %d \n",nPacote);
 		pcap_sendpacket(fp, buf, len);
-		char* stringFormatada = formatString(nPacote,len, 13800);
-		fprintf(file, "%s\n", stringFormatada);
+		utc();
+		// char* stringFormatada = formatString(nPacote,len, 13800);
+		// fprintf(file, "%s\n", stringFormatada);
 		usleep(delayFixo);  // Converte para microssegundos
 
 	}
@@ -136,7 +142,8 @@ int main() {
     initialise_iec61850();
     fp = initWinpcap();
 
-	file = fopen("enviaGoose.csv", "a"); // Abre o arquivo para escrita (modo de adição)
+/// Cria e/ou Abre o arquivo enviaGoose.csv 
+	// file = fopen("enviaGoose.csv", "a"); // Abre o arquivo para escrita (modo de adição)
 
 	clock_t inicio = clock();
 
@@ -145,13 +152,14 @@ int main() {
 	time(&fim1);
 	double tempo = difftime(fim1,inicio1);
 	clock_t fim = clock();
-	// double tempo = ((double)(fim-inicio))/CLOCKS_PER_SEC;
 	printf("tempo envio de pacotes %.6f segundos",tempo);
 	printf("\n");
 
 	fflush(stdout);
 	pcap_close(fp);
-	fclose(file);
+
+/// Fechando CSV.
+	// fclose(file);
 
 
 	return 0;
