@@ -6,9 +6,8 @@
 #include <pcap.h>
 #include "iec61850.h"
 #include "json/json.h"
-struct timeval inicioProcessamento, fimProcessamento;
 #define BUFFER_LENGTH	2048
-struct timeval iniciorecebimentno, fimrecebimento,inicioEnvioPacotes,fimEnvioPacotes,inicioEnvioPacote,fimEnvioPacote;
+
 FILE *file;
 time_t inicio1, fim1;
 int verifica = 0 ;
@@ -18,7 +17,7 @@ unsigned char buf[BUFFER_LENGTH] = {0};
 int len = 0;
 
 
-
+// Metodo criada para pegar hora atual.
 char* utc() {
 		struct timespec ts;
 		clock_gettime(CLOCK_REALTIME, &ts);
@@ -32,6 +31,7 @@ char* utc() {
 		printf("Hora recebimento: %s.%09ld\n", formattedTime, ts.tv_nsec);
 }
 
+//// Metodo criado para formatar os dados para salvar no CSV.
 char* formatString(char* hora, int contador, int len, float valor) {
     // Aloca espaço para a string resultante
     char* result = (char*)malloc(256);  // Ajuste o tamanho conforme necessário
@@ -56,10 +56,12 @@ static int contadorSV = 0; // Declara um contador como estático para preservar 
 
 void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_data) {
     	
+//// Verificando se e um pacote GOOSE.
 	if (pkt_data[3] == 0x01) {
-		utc();
-		contador++; // Incrementa o contador dentro do if
+		contador++; 
 		verifica++;
+		/// utilizado para pegar o tempo de inicio da captura.
+			/// Nao foi utilizado antes pois o pcap pega varios pacotes alem de GOOSE E SV.
 		if(verifica == 1)
 		{
 			time(&inicio1);
@@ -69,6 +71,7 @@ void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_cha
 
 		gse_sv_packet_filter((unsigned char *) pkt_data, header->len);
 
+		/// quando o gse_sv_Paclek_filter nao estava funcionando a variavel foi atualizada manualmente.
 		E1Q1SB1.S1.C1.TVTRa_1.Vol.instMag.f = D1Q1SB4.S1.C1.RSYNa_1.gse_inputs_ItlPositions.E1Q1SB1_C1_Positions.C1_TVTR_1_Vol_instMag.f;
 		int length2 = E1Q1SB1.S1.C1.LN0.ItlPositions.send((unsigned char *) pkt_data, 1, 512);  // generate a goose packet, and store the bytes in "buffer"                   // set a value that appears in the dataset used by the "ItlPositions" GOOSE Control
 		gse_sv_packet_filter((unsigned char *) pkt_data, length2);
@@ -76,33 +79,42 @@ void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_cha
 		
 		float inputValue = D1Q1SB4.S1.C1.RSYNa_1.gse_inputs_ItlPositions.E1Q1SB1_C1_Positions.C1_TVTR_1_Vol_instMag.f;
 		printf("Valor %f\n",inputValue);
-		time(&fim1);
  
-    	char* hora = utc();
-    	char* stringFormatada = formatString(hora, contador, header->len, inputValue);
-		fprintf(file, "%s\n", stringFormatada);
+    	// char* hora = utc();
+    	// char* stringFormatada = formatString(hora, contador, header->len, inputValue);
+		// fprintf(file, "%s\n", stringFormatada);
     }
-	
+
+/// Verificando se e um pacote SV.
 	if (pkt_data[3] == 0x04) {
 		contadorSV++; // Incrementa o contador dentro do if
+		verifica++;
+		if(verifica == 1)
+		{
+			time(&inicio1);
 
+		}
 		printf("Pacote SV %d capturado: %d bytes\n",contadorSV, header->len);
 		gse_sv_packet_filter((unsigned char *) pkt_data, header->len);
+		printf("SV A test: %f\n", D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsA.instMag.f );
+		printf("SV B test: %f\n", D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsB.instMag.f );
+			
+		// Antes o gse_sv nao estava funcionando entao tive que fazer essa parte para atualizar o valor para validacao.	
+		//Todas as analises foram feitas com o codigo a baixo.
+		// len = E1Q1SB1.S1.C1.LN0.rmxuCB.update(buf);
+		// // printf("len value SV: %d\n", len);
+		// int length2 = E1Q1SB1.S1.C1.LN0.ItlPositions.send((unsigned char *) pkt_data, 1, 512);  
+		// printf("Valor : %f\n", D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsA.instMag.f);
+		// gse_sv_packet_filter((unsigned char *) pkt_data, length2);
+		// float inputValue = D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsA.instMag.f;
 
-		len = E1Q1SB1.S1.C1.LN0.rmxuCB.update(buf);
-		printf("len value SV: %d\n", len);
-		int length2 = E1Q1SB1.S1.C1.LN0.ItlPositions.send((unsigned char *) pkt_data, 1, 512);  // generate a goose packet, and store the bytes in "buffer"                   // set a value that appears in the dataset used by the "ItlPositions" GOOSE Control
-		printf("Valor : %f\n", D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsA.instMag.f);
-		gse_sv_packet_filter((unsigned char *) pkt_data, length2);
-		float inputValue = D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsA.instMag.f;
+// // Salva arquivos no CSV.
+//     	char* hora = utc();
+//     	char* stringFormatada = formatString(hora, contadorSV, header->len, inputValue);
+// 		fprintf(file, "%s\n", stringFormatada);
 
-    	char* hora = utc();
-    	char* stringFormatada = formatString(hora, contadorSV, header->len, inputValue);
-		// Escreve cabeçalho (opcional)
-		fprintf(file, "%s\n", stringFormatada);
+
     }	
-		printf("\n");
-		// Fecha o arquivo
 
 }
 
@@ -141,20 +153,29 @@ int main() {
 	int len = 0;
 	initialise_iec61850();
 	fp = initWinpcap();
-	file = fopen("recebe.csv", "a"); // Abre o arquivo para escrita (modo de adição)
+	//Define a quantidade de pacotes a serem capturados.
+		/// Goose = 46 e SV = 300
+	int qtPacotes = 300;
+
+	/// Abrindo arquivo csv em modo adicao.
+	// file = fopen("recebe.csv", "a"); // Abre o arquivo para escrita (modo de adição)
 
 	printf("Inicio captura de pacote: ");
-	while(verifica < 46){
+	while(verifica < qtPacotes){
+		
 		pcap_loop(fp, 1, packet_handler,NULL);
 
 	}
+	time(&fim1);
+
 	clock_t fim = clock();
 	double tempo1 = difftime(fim1, inicio1);
 	printf("Tempo total decorrido: %.6f segundos\n", tempo1);
-	printf("\n");
 
 	pcap_close(fp);
-	fclose(file);
+
+	/// Fecha CSV
+	// fclose(file);
 
 
 	return 0;
