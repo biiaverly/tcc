@@ -6,7 +6,6 @@
 #include <pcap.h>
 #include "iec61850.h"
 #include "json/json.h"
-
 #define BUFFER_LENGTH	2048
 
 pcap_t *fp;
@@ -16,10 +15,8 @@ int len = 0;
 FILE *file;
 int contador = 0;
 
-void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_data) {
-	gse_sv_packet_filter((unsigned char *) pkt_data, header->len);
-}
-/// F
+
+// Metodo criada para pegar hora atual.
 char* utc() {
 		struct timespec ts;
 		clock_gettime(CLOCK_REALTIME, &ts);
@@ -30,8 +27,10 @@ char* utc() {
 		char formattedTime[20];
 		strftime(formattedTime, sizeof(formattedTime), "%H:%M:%S", &tm);
 
-		printf("Hora envio: %s.%09ld\n", formattedTime, ts.tv_nsec);
+		printf("Hora recebimento: %s.%09ld\n", formattedTime, ts.tv_nsec);
 }
+
+//// Metodo criado para formatar os dados para salvar no CSV.
 char* formatString(char* hora, int contador, int len, float valor) {
     // Aloca espaço para a string resultante
     char* result = (char*)malloc(256);  // Ajuste o tamanho conforme necessário
@@ -46,39 +45,36 @@ char* formatString(char* hora, int contador, int len, float valor) {
             1900 + time_info->tm_year, time_info->tm_mon + 1, time_info->tm_mday,
             time_info->tm_hour, time_info->tm_min, time_info->tm_sec,
             current_time.tv_usec, valor, contador, len);
-
-    // Retorna a string resultante
     return result;
 }
 
+//// 	Metodo para enviar pacotes SV
 void enviarPacoteSV(float valueSV, pcap_t *fp) {
     unsigned char buf[BUFFER_LENGTH] = {0};
 
-	// test Sampled Values
-	E1Q1SB1.S1.C1.exampleRMXU_1.AmpLocPhsA.instMag.f = rand();
+	/// definindo samples values
+	E1Q1SB1.S1.C1.exampleRMXU_1.AmpLocPhsA.instMag.f = valueSV;
+	E1Q1SB1.S1.C1.exampleRMXU_1.AmpLocPhsB.instMag.f = valueSV*2;
 
-	printf("Enviando value SV: %f\n", valueSV);
-
+	///Loop para percorrer todos os ASDU (0-15)
 	int i = 0;
 	for (i = 0; i < E1Q1SB1.S1.C1.LN0.rmxuCB.noASDU; i++) {
 		len = E1Q1SB1.S1.C1.LN0.rmxuCB.update(buf);
 		if (len > 0) {
 			contador++;
-			char* hora = utc();
-			printf("len value SV: %d\n", len);
+			/// enviando pacote SV
 			pcap_sendpacket(fp, buf, len);
+			//// utilizado para analise sem CSV.
+			utc();
+			//// Metodo para decodificar pacotes SV e Goose ( valida se o modelo foi atualizado corretamente ).
 			gse_sv_packet_filter(buf, len);
-
-			printf("Valor: %f\n", D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[0].C1_RMXU_1_AmpLocPhsA.instMag.f);
-			printf("SV test: %s\n", D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsA.instMag.f == valueSV ? "passed" : "failed");
-			fflush(stdout);
-			printf("Valor de i: %d \n",i);
-			printf("\n");
+			printf("SV A test: %s\n", D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsA.instMag.f == valueSV ? "passed" : "failed");
+			printf("SV B test: %s\n", D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsB.instMag.f == valueSV*2 ? "passed" : "failed");
 			
-			int inputValue = D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsA.instMag.f;
-    		char* stringFormatada = formatString(hora, contador,len, inputValue);
-		// Escreve cabeçalho (opcional)
-			fprintf(file, "%s\n", stringFormatada);
+	// //// Salvando dados no CSV.		
+	// 		int inputValue = D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsA.instMag.f;
+	// 		char* stringFormatada = formatString(hora, contador,len, inputValue);
+	// 		fprintf(file, "%s\n", stringFormatada);
 		}
 
 	}
@@ -113,24 +109,23 @@ pcap_t *initWinpcap() {
 	return fpl;
 }
 
-
-
 int main() {
 
-    int len = 0;
+	int numeroPacotes = 300;
+	int pacoteAtual = 0;
 	float valueSV = (float) rand() / (float) RAND_MAX;
+
+	//// Inicializando bibliotecas base.
     initialise_iec61850();
     fp = initWinpcap();
 
-	file = fopen("enviaSV.csv", "a"); // Abre o arquivo para escrita (modo de adição)
-
-	int max_delay = 300;
-	int delay = 0;
-	clock_t inicio = clock();	
-    while (delay <= max_delay) {
+	// file = fopen("enviaSV.csv", "a"); // Abre o arquivo para escrita (modo de adição)
+	clock_t inicio = clock();
+	//// loop para envio dos pacotes	
+    while (pacoteAtual <= numeroPacotes) {
     	enviarPacoteSV(valueSV, fp);
 		usleep(208); // Espera por 208 nanossegundos
-	    delay++; // Incrementa delay (ou use a lógica desejada para ajustar o valor de delay)
+	    pacoteAtual++; 
 	}
     clock_t fim = clock();
     double tempoDecorrido = ((double)(fim - inicio)) / CLOCKS_PER_SEC;
@@ -138,7 +133,7 @@ int main() {
 
 	fflush(stdout);
 	pcap_close(fp);
-	fclose(file);
+	// fclose(file);
 
 
 	return 0;
