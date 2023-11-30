@@ -6,6 +6,9 @@
 #include <pcap.h>
 #include "iec61850.h"
 #include "json/json.h"
+#include <arpa/inet.h>
+
+#define PORT 12345
 #define BUFFER_LENGTH	2048
 
 FILE *file;
@@ -16,6 +19,34 @@ char errbuf[PCAP_ERRBUF_SIZE];
 unsigned char buf[BUFFER_LENGTH] = {0};
 int len = 0;
 
+
+#define PORT 12345
+
+void syncTime(int client_socket) {
+    struct timeval client_time;
+
+    // Receber tempo do cliente
+    recv(client_socket, &client_time, sizeof(client_time), 0);
+
+    // Obter tempo atual com milissegundos
+    struct timeval server_time;
+    gettimeofday(&server_time, NULL);
+
+    // Converter a estrutura timeval para uma estrutura tm
+    struct tm* client_tm = localtime(&client_time.tv_sec);
+    struct tm* server_tm = localtime(&server_time.tv_sec);
+
+    // Imprimir o tempo recebido do cliente
+    printf("Tempo recebido do cliente: %02d:%02d:%02d.%05ld\n",
+           client_tm->tm_hour, client_tm->tm_min, client_tm->tm_sec, client_time.tv_usec / 100);
+
+    // Enviar tempo do servidor de volta ao cliente
+    send(client_socket, &server_time, sizeof(server_time), 0);
+
+    // Imprimir o tempo enviado de volta ao cliente
+    printf("Tempo enviado de volta ao cliente: %02d:%02d:%02d.%05ld\n",
+           server_tm->tm_hour, server_tm->tm_min, server_tm->tm_sec, server_time.tv_usec / 100);
+}
 
 // Metodo criada para pegar hora atual.
 char* utc() {
@@ -96,8 +127,8 @@ void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_cha
 		}
 		printf("Pacote SV %d capturado: %d bytes\n",contadorSV, header->len);
 		gse_sv_packet_filter((unsigned char *) pkt_data, header->len);
-		printf("SV A test: %f\n", D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsA.instMag.f );
-		printf("SV B test: %f\n", D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsB.instMag.f );
+		// printf("SV A test: %f\n", D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsA.instMag.f );
+		// printf("SV B test: %f\n", D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsB.instMag.f );
 			
 		// Antes o gse_sv nao estava funcionando entao tive que fazer essa parte para atualizar o valor para validacao.	
 		//Todas as analises foram feitas com o codigo a baixo.
@@ -108,10 +139,10 @@ void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_cha
 		// gse_sv_packet_filter((unsigned char *) pkt_data, length2);
 		// float inputValue = D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsA.instMag.f;
 
-// // Salva arquivos no CSV.
-//     	char* hora = utc();
-//     	char* stringFormatada = formatString(hora, contadorSV, header->len, inputValue);
-// 		fprintf(file, "%s\n", stringFormatada);
+// Salva arquivos no CSV.
+    	char* hora = utc();
+    	char* stringFormatada = formatString(hora, contadorSV, header->len, D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsA.instMag.f);
+		fprintf(file, "%s\n", stringFormatada);
 
 
     }	
@@ -153,28 +184,81 @@ int main() {
 	int len = 0;
 	initialise_iec61850();
 	fp = initWinpcap();
-	//Define a quantidade de pacotes a serem capturados.
-		/// Goose = 46 e SV = 300
-	int qtPacotes = 300;
 
-	/// Abrindo arquivo csv em modo adicao.
+    int server_socket, client_socket;
+    struct sockaddr_in server_addr, client_addr;
+    socklen_t client_len = sizeof(client_addr);
+
+    // Cria um socket
+    server_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_socket == -1) {
+        perror("Erro ao criar o socket");
+        exit(EXIT_FAILURE);
+    }
+
+    // Configura o endereço do servidor
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+    server_addr.sin_port = htons(PORT);
+
+    // Liga o socket ao endereço do servidor
+    if (bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
+        perror("Erro ao vincular o socket");
+        close(server_socket);
+        exit(EXIT_FAILURE);
+    }
+
+    // Aguarda por conexões
+    if (listen(server_socket, 1) == -1) {
+        perror("Erro ao escutar por conexões");
+        close(server_socket);
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Aguardando por conexões...\n");
+
+    // Aceita a conexão do cliente
+    client_socket = accept(server_socket, (struct sockaddr*)&client_addr, &client_len);
+    if (client_socket == -1) {
+        perror("Erro ao aceitar a conexão do cliente");
+        close(server_socket);
+        exit(EXIT_FAILURE);
+    }
+
+    // Mantém a sincronização contínua de tempo
+    while (1) {
+        syncTime(client_socket);
+        sleep(1);  // Aguarda 1 segundo antes de enviar a próxima solicitação
+    }
+
+    // Fecha os sockets
+    close(client_socket);
+    close(server_socket);
+
+
+	// //Define a quantidade de pacotes a serem capturados.
+	// 	/// Goose = 46 e SV = 300
+	// int qtPacotes = 300;
+
+	// /// Abrindo arquivo csv em modo adicao.
 	// file = fopen("recebe.csv", "a"); // Abre o arquivo para escrita (modo de adição)
 
-	printf("Inicio captura de pacote: ");
-	while(verifica < qtPacotes){
+	// printf("Inicio captura de pacote: ");
+	// while(verifica < qtPacotes){
 		
-		pcap_loop(fp, 1, packet_handler,NULL);
+	// 	pcap_loop(fp, 1, packet_handler,NULL);
 
-	}
-	time(&fim1);
+	// }
+	// time(&fim1);
 
-	clock_t fim = clock();
-	double tempo1 = difftime(fim1, inicio1);
-	printf("Tempo total decorrido: %.6f segundos\n", tempo1);
+	// clock_t fim = clock();
+	// double tempo1 = difftime(fim1, inicio1);
+	// printf("Tempo total decorrido: %.6f segundos\n", tempo1);
 
-	pcap_close(fp);
+	// pcap_close(fp);
 
-	/// Fecha CSV
+	// /// Fecha CSV
 	// fclose(file);
 
 
