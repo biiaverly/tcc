@@ -19,52 +19,43 @@ pcap_t *fp;
 char errbuf[PCAP_ERRBUF_SIZE];
 unsigned char buf[BUFFER_LENGTH] = {0};
 int len = 0;
+int sockfd;
 
-void synchronizeClock() {
-    int sockfd;
-    struct sockaddr_in serv_addr;
+char* synchronizeClock() {
     struct timeval tv;
 
-    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
-        perror("Erro ao criar o socket");
-        exit(EXIT_FAILURE);
-    }
-
-    memset(&serv_addr, 0, sizeof(serv_addr));
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(PORT);
-    if (inet_pton(AF_INET, SERVER_ADDRESS, &serv_addr.sin_addr) <= 0) {
-        perror("Erro ao converter o endereço");
-        exit(EXIT_FAILURE);
-    }
-
-    if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) == -1) {
-        perror("Erro ao conectar");
-        exit(EXIT_FAILURE);
-    }
-
-        // Solicita o tempo ao servidor
+		// Solicita o tempo ao servidor
         char request[] = "GET_TIME";
         if (write(sockfd, request, sizeof(request)) == -1) {
             perror("Erro ao solicitar o tempo ao servidor");
             exit(EXIT_FAILURE);
         }
-
         // Recebe o tempo do servidor
         if (read(sockfd, &tv, sizeof(struct timeval)) == -1) {
             perror("Erro ao receber o tempo do servidor");
             exit(EXIT_FAILURE);
         }
 
+		char* formattedTime = (char*)malloc(32);  // Ajuste o tamanho conforme necessário
+
+		// Formata os valores na string
+		sprintf(formattedTime, "%02d:%02d:%02d.%06ld",
+				localtime(&tv.tv_sec)->tm_hour,
+				localtime(&tv.tv_sec)->tm_min,
+				localtime(&tv.tv_sec)->tm_sec,
+				tv.tv_usec);
+
+
+		// Retorna a hora formatada como string
+		return formattedTime;
         // Processa o tempo recebido e ajusta o relógio do Notebook 1 ou 2
         // Neste exemplo, apenas imprime o tempo recebido
-        printf("Tempo recebido: %02d:%02d:%02d.%06ld\n", 
-               localtime(&tv.tv_sec)->tm_hour,
-               localtime(&tv.tv_sec)->tm_min,
-               localtime(&tv.tv_sec)->tm_sec,
-               tv.tv_usec);
+        // printf("Tempo recebido: %02d:%02d:%02d.%06ld\n", 
+        //        localtime(&tv.tv_sec)->tm_hour,
+        //        localtime(&tv.tv_sec)->tm_min,
+        //        localtime(&tv.tv_sec)->tm_sec,
+        //        tv.tv_usec);
     
-    close(sockfd);
 }
 void getTime(int sockfd) {
     struct timeval client_time;
@@ -101,17 +92,18 @@ char* formatString(char* hora, int contador, int len, float valor) {
     // Aloca espaço para a string resultante
     char* result = (char*)malloc(256);  // Ajuste o tamanho conforme necessário
 
-    // Obtém o tempo atual
-    struct timeval current_time;
-    gettimeofday(&current_time, NULL);
-    struct tm* time_info = gmtime(&current_time.tv_sec);
+    // // Obtém o tempo atual
+    // struct timeval current_time;
+    // gettimeofday(&current_time, NULL);
+    // struct tm* time_info = gmtime(&current_time.tv_sec);
 
+	// printf("hora %s",hora);
     // Formata os valores na string
-    sprintf(result, "%d-%02d-%02d %02d:%02d:%02d.%06ld,%f,%d,%d",
-            1900 + time_info->tm_year, time_info->tm_mon + 1, time_info->tm_mday,
-            time_info->tm_hour, time_info->tm_min, time_info->tm_sec,
-            current_time.tv_usec, valor, contador, len);
+    // Formata os valores na string, incluindo a hora capturada
+    sprintf(result, "%s,%f,%d,%d",hora,
+            valor, contador, len);
 
+    return result;
     // Retorna a string resultante
     return result;
 }
@@ -152,8 +144,9 @@ void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_cha
 
 /// Verificando se e um pacote SV.
 	if (pkt_data[3] == 0x04) {
+		char* hora =synchronizeClock();
+
 		// printf("Pacote %d capturado:",contadorSV);
-		synchronizeClock();
 		contadorSV++; // Incrementa o contador dentro do if
 		verifica++;
 		if(verifica == 1)
@@ -176,10 +169,9 @@ void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_cha
 		// gse_sv_packet_filter((unsigned char *) pkt_data, length2);
 		// float inputValue = D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsA.instMag.f;
 
-// // Salva arquivos no CSV.
-//     	char* hora = "bia";
-//     	char* stringFormatada = formatString(hora, contadorSV, header->len, D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsA.instMag.f);
-// 		fprintf(file, "%s\n", stringFormatada);
+// Salva arquivos no CSV.
+    	char* stringFormatada = formatString(hora, contadorSV, header->len, D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsA.instMag.f);
+		fprintf(file, "%s\n", stringFormatada);
 
 
     }	
@@ -223,6 +215,28 @@ int main() {
 	fp = initWinpcap();
 
 
+    struct sockaddr_in serv_addr;
+
+    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+        perror("Erro ao criar o socket");
+        exit(EXIT_FAILURE);
+    }
+
+    memset(&serv_addr, 0, sizeof(serv_addr));
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(PORT);
+    if (inet_pton(AF_INET, SERVER_ADDRESS, &serv_addr.sin_addr) <= 0) {
+        perror("Erro ao converter o endereço");
+        exit(EXIT_FAILURE);
+    }
+
+    if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) == -1) {
+        perror("Erro ao conectar");
+        exit(EXIT_FAILURE);
+    }
+
+
+
 
 	//Define a quantidade de pacotes a serem capturados.
 		/// Goose = 46 e SV = 300
@@ -248,6 +262,7 @@ int main() {
 	/// Fecha CSV
 	fclose(file);
 
+    close(sockfd);
 
 	return 0;
 }
