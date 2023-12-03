@@ -7,35 +7,71 @@
 #include "json/json.h"
 #define BUFFER_LENGTH	2048
 
+
+#define PORT 12345
+#define SERVER_ADDRESS "192.168.0.17"  // Substitua pelo endereço do servidor
+int sockfd; // Descritor do socket
+
 pcap_t *fp;
 char errbuf[PCAP_ERRBUF_SIZE];
 unsigned char buf[BUFFER_LENGTH] = {0};
 FILE *file;
 time_t inicio1,fim1;
+
+///// Metodo criado para pegar a hora do notebook e testar o escorregamento dos relogios.
+char* synchronizeClock() {
+    struct timeval tv;
+ 
+    // Solicita o tempo ao servidor
+        char request[] = "GET_TIME";
+        if (write(sockfd, request, sizeof(request)) == -1) {
+            perror("Erro ao solicitar o tempo ao servidor");
+            exit(EXIT_FAILURE);
+        }
+
+    // Recebe o tempo do servidor
+        if (read(sockfd, &tv, sizeof(struct timeval)) == -1) {
+            perror("Erro ao receber o tempo do servidor");
+            exit(EXIT_FAILURE);
+        }
+
+    // Aloca espaço para a string resultante
+        char* formattedTime = (char*)malloc(32);  // Ajuste o tamanho conforme necessário
+
+        sprintf(formattedTime, "%02d:%02d:%02d.%06ld",
+                localtime(&tv.tv_sec)->tm_hour,
+                localtime(&tv.tv_sec)->tm_min,
+                localtime(&tv.tv_sec)->tm_sec,
+                tv.tv_usec);
+
+    return formattedTime;
+}
+
 void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_data) {
 	gse_sv_packet_filter((unsigned char *) pkt_data, header->len);
 }
 
-//// Metodo criado para formatar os dados para salvar no CSV.
-char* formatString( int contador, int len, float valor) {
-    // Aloca espaço para a string resultante
+// Metodo criado para formatar os dados para salvar no CSV.
+char* formatString(char* hora,int contador, int len, float valor) {
+  // 1. Aloca espaço para a string resultante
     char* result = (char*)malloc(256);  // Ajuste o tamanho conforme necessário
 
-    // Obtém o tempo atual
-    struct timeval current_time;
-    gettimeofday(&current_time, NULL);
-    struct tm* time_info = gmtime(&current_time.tv_sec);
+  // 2. Formata os valores na string
+    // sprintf(result, "%d-%02d-%02d %02d:%02d:%02d.%06ld,%f,%d,%d",
+    //         1900 + time_info->tm_year, time_info->tm_mon + 1, time_info->tm_mday,
+    //         time_info->tm_hour, time_info->tm_min, time_info->tm_sec,
+    //         current_time.tv_usec, valor, contador, len);
 
-    // Formata os valores na string
-    sprintf(result, "%d-%02d-%02d %02d:%02d:%02d.%06ld,%f,%d,%d",
-            1900 + time_info->tm_year, time_info->tm_mon + 1, time_info->tm_mday,
-            time_info->tm_hour, time_info->tm_min, time_info->tm_sec,
-            current_time.tv_usec, valor, contador, len);
+    //--------------------Metodo utilizando quando a hora vem do synchronizeClock.
+    // Formata os valores na string, incluindo a hora capturada
+    sprintf(result, "%s,%f,%d,%d",
+            hora, valor, contador, len);
 
-    // Retorna a string resultante
     return result;
 }
+
 // Metodo criada para pegar hora atual.
+ // Foi criado o metodo de sincronismo para tentar mitidar o escorregamento do tempo.
 char* utc() {
 		struct timespec ts;
 		clock_gettime(CLOCK_REALTIME, &ts);
@@ -43,12 +79,23 @@ char* utc() {
 		struct tm tm;
 		localtime_r(&ts.tv_sec, &tm);
 
-		char formattedTime[20];
-		strftime(formattedTime, sizeof(formattedTime), "%H:%M:%S", &tm);
+        char* formattedTime = (char*)malloc(30); // Adjust the size as needed
 
-		printf("Hora recebimento: %s.%09ld\n", formattedTime, ts.tv_nsec);
+        if (formattedTime == NULL) {
+            perror("Error allocating memory");
+            exit(EXIT_FAILURE);
+        }
+
+        // Format the time into the allocated memory
+        strftime(formattedTime, 30, "%Y-%m-%d %H:%M:%S", &tm);
+        sprintf(formattedTime + strlen(formattedTime),",%5ld",ts.tv_nsec/1000);
+        return formattedTime;
+
+
 }
+
 void enviarPacotesComAtrasos(float valueGSE, pcap_t *fp) {
+  // 0.  Definindo variaveis iniciais.
 
 	int delay = 1;  
     int max_delay = 50; 
@@ -56,51 +103,81 @@ void enviarPacotesComAtrasos(float valueGSE, pcap_t *fp) {
 	int contador = 1;
     unsigned char buf[BUFFER_LENGTH] = {0};
 
-	printf("Enviando pacotes com atraso de %d ms\n", 0);
+	// printf("Enviando pacotes com atraso de %d ms\n", 0);
 
-/// Enviando o primeiro pacote apos um Evento (senf(buf,1,2))
+  // 1.  Enviando o primeiro pacote apos um Evento (senf(buf,evento,delay))
+   // 1.1. Enviando o primeiro pacote.
     E1Q1SB1.S1.C1.TVTRa_1.Vol.instMag.f = valueGSE;
-	len = E1Q1SB1.S1.C1.LN0.ItlPositions.send(buf, 1, 2);
-	utc();
-	usleep(100);		
+	len = E1Q1SB1.S1.C1.LN0.ItlPositions.send(buf, 1, 1); //cria pacote GOOSE e salva no buffer.
 	pcap_sendpacket(fp, buf, len);
 
-// ///Salvando o dado no csv.	
-// 	int inputValue = E1Q1SB1.S1.C1.TVTRa_1.Vol.instMag.f;
-// 	char* stringFormatada = formatString(contador,len, inputValue);
-// 	fprintf(file, "%s\n", stringFormatada);
+   // 1.2. Escolhendo o metodo e tipo de sincronismo da hora:
+   // ----------- M E T O D O      S E M        C S V 
+    // char* hora = synchronizeClock(); // com sincronismo
+    // char* hora = utc(); // sem sincronismo
+    // printf("Hora envio: %s\n",hora);
 
-/// Parte transitoria de quando ocorre um evento ate chegar a parte estavel 
+   //----------- M E T O D O      C O M        C S V 
+    // char* hora = synchronizeClock(); // com sincronismo
+    // char* hora = utc(); // sem sincronismo
+	// int inputValue = E1Q1SB1.S1.C1.TVTRa_1.Vol.instMag.f; // define o valor que sera salvo no csv.
+	// char* stringFormatada = formatString(hora,contador,len, inputValue); // formata os dados para o csv.
+	// fprintf(file, "%s\n", stringFormatada); // salva os dados no csv.
+
+   // 1.3. Esperando tempo para retransmissao.
+	usleep(1000); /// espera 1 ms ( tempo de retransmissao mais curto)	
+
+
+  // 2.  Parte transitoria de quando ocorre um evento ate chegar a parte estavel 
     while (delay <= max_delay) {
+    // 2.1. Enviando pacotes.
 		contador++;
 		len = E1Q1SB1.S1.C1.LN0.ItlPositions.send(buf, 0, delay);
 
-        usleep(delay * 1000);  // Converte para microssegundos
-        printf("Enviando pacotes numero %d com atraso de %d ms\n",contador, delay);
+        // printf("Enviando pacotes numero %d com atraso de %d ms\n",contador, delay);
         pcap_sendpacket(fp, buf, len);
-		utc();		
 
-/// Salvando no csv.
-		// char* stringFormatada = formatString(contador,len, inputValue);
-		// fprintf(file, "%s\n", stringFormatada);
+    // 2.2. Escolhendo o metodo e tipo de sincronismo da hora:
+      // 2.2.1 ----------- M E T O D O      S E M        C S V 
+        utc();   // sem sincronismo
+        synchronizeClock(); // com sincronismo
 
+      // 2.2.2 ----------- M E T O D O      C O M        C S V 
+        char* hora = synchronizeClock(); // com sincronismo
+        // char* hora = utc(); // sem sincronismo
+        int inputValue = E1Q1SB1.S1.C1.TVTRa_1.Vol.instMag.f; // define o valor que sera salvo no csv.
+        char* stringFormatada = formatString(hora,contador,len, inputValue); // formata os dados para o csv.
+        fprintf(file, "%s\n", stringFormatada); // salva os dados no csv.
+    
+    // 2.3. Esperando tempo para retransmissao e incremento de tempo.
+        usleep(delay * 1000); 
         delay += 2;  // Incremento de 2ms a cada iteração
     }
 
-/// Enviando pacotes com delay fixo (keep alive)
+  // 3. Parte estacionaria , funcionando como um KEEP ALIVE.
+   // 3.0. Definindo variaives iniciais
     E1Q1SB1.S1.C1.TVTRa_1.Vol.instMag.f = 13800;
-//	Definindo o tempo fixo como 50 ms
 	int delayFixo = 50000; 
-	len = E1Q1SB1.S1.C1.LN0.ItlPositions.send(buf, 0, delayFixo);
+   // 3.1.  Enviando pacotes delay fixo (send(buf,0,50000))
+	len = E1Q1SB1.S1.C1.LN0.ItlPositions.send(buf, 0, delayFixo); 
 	for(int cont =0 ; cont < 20 ; cont++){
 		int nPacote = contador + cont +1;
-		printf("Enviando pacotes com rede estavel %d \n",nPacote);
+		// printf("Enviando pacotes com rede estavel %d \n",nPacote);
 		pcap_sendpacket(fp, buf, len);
-		utc();
-		// char* stringFormatada = formatString(nPacote,len, 13800);
-		// fprintf(file, "%s\n", stringFormatada);
-		usleep(delayFixo);  // Converte para microssegundos
 
+   // 3.2. Escolhendo o metodo e tipo de sincronismo da hora:
+        // ----------- M E T O D O      S E M        C S V 
+        // utc();   // sem sincronismo
+        // synchronizeClock(); // com sincronismo
+
+        //----------- M E T O D O      C O M        C S V 
+        char* hora = synchronizeClock(); // com sincronismo
+        // char* hora = utc(); // sem sincronismo
+        int inputValue = E1Q1SB1.S1.C1.TVTRa_1.Vol.instMag.f; // define o valor que sera salvo no csv.
+        char* stringFormatada = formatString(hora,contador,len, inputValue); // formata os dados para o csv.
+        fprintf(file, "%s\n", stringFormatada); // salva os dados no csv.
+   // 3.3 Esperando o delay para enviar novo pacote.
+		usleep(delayFixo);  // Converte para microssegundos
 	}
 
 }
@@ -136,30 +213,52 @@ pcap_t *initWinpcap() {
 }
 
 int main() {
-
+ // 0. Definindo variaveis inicias e inicializando bibiliotecas.
     int len = 0;
     float valueGSE = (float)rand();
     initialise_iec61850();
     fp = initWinpcap();
 
-/// Cria e/ou Abre o arquivo enviaGoose.csv 
-	// file = fopen("enviaGoose.csv", "a"); // Abre o arquivo para escrita (modo de adição)
+ // 1. Definindo e configurando socket para sincronismo de tempo.
+     struct sockaddr_in serv_addr;
+     // Criação do socket
+         if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+             perror("Erro ao criar o socket");
+             exit(EXIT_FAILURE);
+        }
 
-	clock_t inicio = clock();
+    // Configuração do endereço do servidor
+         memset(&serv_addr, 0, sizeof(serv_addr));
+         serv_addr.sin_family = AF_INET;
+         serv_addr.sin_port = htons(PORT);
+        if (inet_pton(AF_INET, SERVER_ADDRESS, &serv_addr.sin_addr) <= 0) {
+            perror("Erro ao converter o endereço");
+            exit(EXIT_FAILURE);
+        }
 
+    // Conversão do endereço IP do servidor para o formato binário
+        if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) == -1) {
+            perror("Erro ao conectar");
+            exit(EXIT_FAILURE);
+        }
+
+
+ // 2. Abrindo CSV.
+	file = fopen("enviaGoose.csv", "a"); // Abre o arquivo para escrita (modo de adição)
+ // 3.  Envia pacotes Goose.
 	time(&inicio1);
     enviarPacotesComAtrasos(valueGSE, fp);
 	time(&fim1);
+ // 4. Analise tempo de processamento.
 	double tempo = difftime(fim1,inicio1);
 	clock_t fim = clock();
 	printf("tempo envio de pacotes %.6f segundos",tempo);
 	printf("\n");
 
+ // 5. Encerrando instancias.
 	fflush(stdout);
 	pcap_close(fp);
-
-/// Fechando CSV.
-	// fclose(file);
+	fclose(file);
 
 
 	return 0;
