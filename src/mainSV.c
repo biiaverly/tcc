@@ -43,19 +43,11 @@ char* synchronizeClock() {
     // Aloca espaço para a string resultante
         char* formattedTime = (char*)malloc(32);  // Ajuste o tamanho conforme necessário
 
-    // Metodo com CSV.
         sprintf(formattedTime, "%02d:%02d:%02d.%06ld",
                 localtime(&tv.tv_sec)->tm_hour,
                 localtime(&tv.tv_sec)->tm_min,
                 localtime(&tv.tv_sec)->tm_sec,
                 tv.tv_usec);
-
-    // Metodo sem CSV.
-        printf("Tempo recebido: %02d:%02d:%02d.%06ld\n", 
-               localtime(&tv.tv_sec)->tm_hour,
-               localtime(&tv.tv_sec)->tm_min,
-               localtime(&tv.tv_sec)->tm_sec,
-               tv.tv_usec);   
 
     return formattedTime;
 }
@@ -69,36 +61,32 @@ char* utc() {
 		struct tm tm;
 		localtime_r(&ts.tv_sec, &tm);
 
-		char formattedTime[20];
-		strftime(formattedTime, sizeof(formattedTime), "%H:%M:%S", &tm);
+        char* formattedTime = (char*)malloc(30); // Adjust the size as needed
 
-		printf("Hora recebimento: %s.%09ld\n", formattedTime, ts.tv_nsec);
+        if (formattedTime == NULL) {
+            perror("Error allocating memory");
+            exit(EXIT_FAILURE);
+        }
+
+        // Format the time into the allocated memory
+        strftime(formattedTime, 30, "%Y-%m-%d %H:%M:%S", &tm);
+        sprintf(formattedTime + strlen(formattedTime),".%5ld",ts.tv_nsec/1000);
+        return formattedTime;
+
 }
 
 //// Metodo criado para formatar os dados para salvar no CSV.
+// Metodo criado para formatar os dados para salvar no CSV.
 char* formatString(char* hora,int contador, int len, float valor) {
-    // Aloca espaço para a string resultante
+  // 1. Aloca espaço para a string resultante
     char* result = (char*)malloc(256);  // Ajuste o tamanho conforme necessário
 
- // // ------------------ Metodo com CSV. 
-//   // Pega hora atual.
-//     struct timeval current_time;
-//     gettimeofday(&current_time, NULL);
-//     struct tm* time_info = gmtime(&current_time.tv_sec)
-
-    // // Formata os valores na string
-    // sprintf(result, "%d-%02d-%02d %02d:%02d:%02d.%06ld,%f,%d,%d",
-    //         1900 + time_info->tm_year, time_info->tm_mon + 1, time_info->tm_mday,
-    //         time_info->tm_hour, time_info->tm_min, time_info->tm_sec,
-    //         current_time.tv_usec, valor, contador, len);
-
-// //--------------------Metodo utilizando quando a hora vem do synchronizeClock.
-  // Formata os valores na string, incluindo a hora capturada
     sprintf(result, "%s,%f,%d,%d",
             hora, valor, contador, len);
 
     return result;
 }
+
 
 //// 	Metodo para enviar pacotes SV
 void enviarPacoteSV(float valueSV, pcap_t *fp) {
@@ -114,23 +102,25 @@ void enviarPacoteSV(float valueSV, pcap_t *fp) {
 		len = E1Q1SB1.S1.C1.LN0.rmxuCB.update(buf);
 		if (len > 0) {
 			contador++;
-            // //(Analise sem CSV) Printar hora atual.
-			// utc();
-			pcap_sendpacket(fp, buf, len);
-            // printf("Pacote %d enviado: ",contador);
-        // // (Sincronismo relogio) Pegar hora do relogio do notebook. 
-           char* hora = synchronizeClock();
 
-		// // (Analise sem CSV)
-			    //// Metodo para decodificar pacotes SV e Goose ( valida se o modelo foi atualizado corretamente ).
+			pcap_sendpacket(fp, buf, len);
+        // Utilizado para validacao.
+            // printf("Pacote %d enviado: ",contador)
 			// gse_sv_packet_filter(buf, len);
 			// printf("SV A test: %s\n", D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsA.instMag.f == valueSV ? "passed" : "failed");
 			// printf("SV B test: %s\n", D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsB.instMag.f == valueSV*2 ? "passed" : "failed");
 			
-	    // // Salvando dados no CSV.		
-			int inputValue = D1Q1SB4.S1.C1.exampleMMXU_1.sv_inputs_rmxuCB.E1Q1SB1_C1_rmxu[15].C1_RMXU_1_AmpLocPhsA.instMag.f;
-			char* stringFormatada = formatString(hora,contador,len, inputValue);
-			fprintf(file, "%s\n", stringFormatada);
+        // 1.2. Escolhendo o metodo e tipo de sincronismo da hora:
+            char* hora = synchronizeClock(); // com sincronismo
+            // char* hora = utc(); // sem sincronismo
+            //----------- M E T O D O      S E M        C S V 
+            // printf("Hora envio: %s\n",hora);
+
+            //----------- M E T O D O      C O M        C S V 
+            int inputValue = E1Q1SB1.S1.C1.TVTRa_1.Vol.instMag.f; // define o valor que sera salvo no csv.
+            char* stringFormatada = formatString(hora,contador,len, inputValue); // formata os dados para o csv.
+            fprintf(file, "%s\n", stringFormatada); // salva os dados no csv.
+
 		}
 	}
 }
@@ -203,7 +193,7 @@ int main() {
 	//// loop para envio dos pacotes	
     while (pacoteAtual <= numeroPacotes) {
     	enviarPacoteSV(valueSV, fp);
-		usleep(208); // Espera por 208 nanossegundos
+		usleep(208); // Espera por 208 microsegundos
 	    pacoteAtual++; 
 	}
     clock_t fim = clock();
