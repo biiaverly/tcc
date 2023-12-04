@@ -56,14 +56,6 @@ char* formatString(char* hora,int contador, int len, float valor) {
   // 1. Aloca espaço para a string resultante
     char* result = (char*)malloc(256);  // Ajuste o tamanho conforme necessário
 
-  // 2. Formata os valores na string
-    // sprintf(result, "%d-%02d-%02d %02d:%02d:%02d.%06ld,%f,%d,%d",
-    //         1900 + time_info->tm_year, time_info->tm_mon + 1, time_info->tm_mday,
-    //         time_info->tm_hour, time_info->tm_min, time_info->tm_sec,
-    //         current_time.tv_usec, valor, contador, len);
-
-    //--------------------Metodo utilizando quando a hora vem do synchronizeClock.
-    // Formata os valores na string, incluindo a hora capturada
     sprintf(result, "%s,%f,%d,%d",
             hora, valor, contador, len);
 
@@ -88,49 +80,45 @@ char* utc() {
 
         // Format the time into the allocated memory
         strftime(formattedTime, 30, "%Y-%m-%d %H:%M:%S", &tm);
-        sprintf(formattedTime + strlen(formattedTime),",%5ld",ts.tv_nsec/1000);
+        sprintf(formattedTime + strlen(formattedTime),".%5ld",ts.tv_nsec/1000);
         return formattedTime;
 
 
 }
 
 void enviarPacotesComAtrasos(float valueGSE, pcap_t *fp) {
+    
   // 0.  Definindo variaveis iniciais.
-
 	int delay = 1;  
     int max_delay = 50; 
     int len = 0;
 	int contador = 1;
     unsigned char buf[BUFFER_LENGTH] = {0};
-
 	// printf("Enviando pacotes com atraso de %d ms\n", 0);
 
   // 1.  Enviando o primeiro pacote apos um Evento (senf(buf,evento,delay))
-   // 1.1. Enviando o primeiro pacote.
+    // 1.1. Enviando o primeiro pacote.
     E1Q1SB1.S1.C1.TVTRa_1.Vol.instMag.f = valueGSE;
-	len = E1Q1SB1.S1.C1.LN0.ItlPositions.send(buf, 1, 1); //cria pacote GOOSE e salva no buffer.
+	len = E1Q1SB1.S1.C1.LN0.ItlPositions.send(buf, 1, delay); //cria pacote GOOSE e salva no buffer.
 	pcap_sendpacket(fp, buf, len);
 
-   // 1.2. Escolhendo o metodo e tipo de sincronismo da hora:
-   // ----------- M E T O D O      S E M        C S V 
+  // 1.2. Escolhendo o metodo e tipo de sincronismo da hora:
     // char* hora = synchronizeClock(); // com sincronismo
-    // char* hora = utc(); // sem sincronismo
+    char* hora = utc(); // sem sincronismo
+    //----------- M E T O D O      S E M        C S V 
     // printf("Hora envio: %s\n",hora);
 
-   //----------- M E T O D O      C O M        C S V 
-    // char* hora = synchronizeClock(); // com sincronismo
-    // char* hora = utc(); // sem sincronismo
-	// int inputValue = E1Q1SB1.S1.C1.TVTRa_1.Vol.instMag.f; // define o valor que sera salvo no csv.
-	// char* stringFormatada = formatString(hora,contador,len, inputValue); // formata os dados para o csv.
-	// fprintf(file, "%s\n", stringFormatada); // salva os dados no csv.
+    //----------- M E T O D O      C O M        C S V 
+	int inputValue = E1Q1SB1.S1.C1.TVTRa_1.Vol.instMag.f; // define o valor que sera salvo no csv.
+	char* stringFormatada = formatString(hora,contador,len, inputValue); // formata os dados para o csv.
+	fprintf(file, "%s\n", stringFormatada); // salva os dados no csv.
 
-   // 1.3. Esperando tempo para retransmissao.
-	usleep(1000); /// espera 1 ms ( tempo de retransmissao mais curto)	
 
 
   // 2.  Parte transitoria de quando ocorre um evento ate chegar a parte estavel 
     while (delay <= max_delay) {
     // 2.1. Enviando pacotes.
+        usleep(delay * 1000); 
 		contador++;
 		len = E1Q1SB1.S1.C1.LN0.ItlPositions.send(buf, 0, delay);
 
@@ -138,19 +126,17 @@ void enviarPacotesComAtrasos(float valueGSE, pcap_t *fp) {
         pcap_sendpacket(fp, buf, len);
 
     // 2.2. Escolhendo o metodo e tipo de sincronismo da hora:
-      // 2.2.1 ----------- M E T O D O      S E M        C S V 
-        utc();   // sem sincronismo
-        synchronizeClock(); // com sincronismo
+        // char* hora = synchronizeClock(); // com sincronismo
+        char* hora = utc(); // sem sincronismo
+        //----------- M E T O D O      S E M        C S V 
+        // printf("Hora envio: %s\n",hora);
 
       // 2.2.2 ----------- M E T O D O      C O M        C S V 
-        char* hora = synchronizeClock(); // com sincronismo
-        // char* hora = utc(); // sem sincronismo
         int inputValue = E1Q1SB1.S1.C1.TVTRa_1.Vol.instMag.f; // define o valor que sera salvo no csv.
         char* stringFormatada = formatString(hora,contador,len, inputValue); // formata os dados para o csv.
         fprintf(file, "%s\n", stringFormatada); // salva os dados no csv.
     
     // 2.3. Esperando tempo para retransmissao e incremento de tempo.
-        usleep(delay * 1000); 
         delay += 2;  // Incremento de 2ms a cada iteração
     }
 
@@ -163,21 +149,20 @@ void enviarPacotesComAtrasos(float valueGSE, pcap_t *fp) {
 	for(int cont =0 ; cont < 20 ; cont++){
 		int nPacote = contador + cont +1;
 		// printf("Enviando pacotes com rede estavel %d \n",nPacote);
+        usleep(delayFixo);  // Converte para microssegundos
+
 		pcap_sendpacket(fp, buf, len);
 
    // 3.2. Escolhendo o metodo e tipo de sincronismo da hora:
+        // char* hora = synchronizeClock(); // com sincronismo
+        char* hora = utc(); // sem sincronismo
         // ----------- M E T O D O      S E M        C S V 
-        // utc();   // sem sincronismo
-        // synchronizeClock(); // com sincronismo
-
-        //----------- M E T O D O      C O M        C S V 
-        char* hora = synchronizeClock(); // com sincronismo
-        // char* hora = utc(); // sem sincronismo
+        // printf("Hora envio: %s\n",hora);
+        // ----------- M E T O D O      C O M        C S V 
         int inputValue = E1Q1SB1.S1.C1.TVTRa_1.Vol.instMag.f; // define o valor que sera salvo no csv.
         char* stringFormatada = formatString(hora,contador,len, inputValue); // formata os dados para o csv.
         fprintf(file, "%s\n", stringFormatada); // salva os dados no csv.
    // 3.3 Esperando o delay para enviar novo pacote.
-		usleep(delayFixo);  // Converte para microssegundos
 	}
 
 }
